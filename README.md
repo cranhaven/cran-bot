@@ -26,4 +26,5 @@ Contents of the message:
  - State why we are opening a new issue: Point to the error on CRAN (and mention the email sent).
  - Give pointers about how to find help (CRAN cookbook, mailing list, ...)
  - If possible give pointers about how to fix issues
+ - Keep in mind [CRAN survey feedback about notices and replies](https://github.com/r-devel/cran-cookbook/wiki/CRAN-Cookbook-Survey-Results#handling-notices-and-responses)
 
