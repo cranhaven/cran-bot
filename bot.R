@@ -8,6 +8,7 @@ if (file.exists(environ_file)) {
     readRenviron(environ_file)
 }
 issues <- tools:::CRAN_package_issues(FALSE)
+all_issues <- tools:::CRAN_package_issues(TRUE)
 
 notifications_file <- "notifications.csv"
 if (file.exists(notifications_file)) {
@@ -20,16 +21,17 @@ if (file.exists(notifications_file)) {
 
 # New issues to message
 new_issues <- setdiff(issues$ID, notifications_sent$ID)
-notifications <- cbind(issues[issues$ID %in% new_issues, c("ID", "Package")], Date = Sys.Date())
+notifications <- issues[issues$ID %in% new_issues, c("ID", "Package",  "Date")]
+notifications$Date <- as.Date(notifications$Date)
 
 # Keep id of the issue on notifications
-
-write.csv(rbind(notifications_sent, notifications), "notifications.csv", row.names = FALSE)
+write.csv(rbind(notifications_sent, notifications), notifications_file, row.names = FALSE)
 
 # Old issues to close
-close_issues <- issues$ID[issues$ID == notifications_sent$ID & issues$Before < Sys.Date() +1]
-issues <- notifications$Issue[match(notifications$ID, close_issues)]
-# Retrieve
+closed_issues <- setdiff(notifications$ID, all_issues$ID)
+if (length(closed_issues)) {
+  # Close github issue
+}
 
 
 # Retrieve repo
@@ -57,7 +59,7 @@ pkgs2repo <- function(pkgs) {
     bug_repo <- urls2ur(pkgs$BugReports)
     ur <- lengths(url_repo)
     br <- lengths(bug_repo)
-    
+
     # Pick the bug repo url or from the url repo if needed
     out <- vector("list", length = length(url_repo))
     for (i in seq_along(url_repo)) {
@@ -83,39 +85,42 @@ p2r <- pkgs2repo(pkgs)
 url_github <- grep("github.com", pkgs$URL, fixed = TRUE)
 s <- strsplit(x = pkgs$URL, split = ",?[[:space:]]")
 github <- grep("github.com", pkgs$BugReports, fixed = TRUE)
-m <- match(issues$Package, pkgs$Package)
-
-affected_packages <- p2r[m]
+affected_positions <- match(issues$Package, pkgs$Package)
+affected_packages <- p2r[affected_positions]
 affected_packages_w_repo <- affected_packages[lengths(affected_packages) > 1]
 
-apwr <- sapply(affected_packages_w_repo, paste0, collapse = "/")
+affected_positions_w_repo <- match(names(affected_packages_w_repo), issues$Package)
+issues_w_notif <- issues[affected_positions_w_repo, ]
+issues_w_notif$repo <- sapply(affected_packages_w_repo, paste0, collapse = "/")
+
+# TODO: Change to real when working
 fake <- rep("cranhaven/cran-bot-scratch", length = 1) # length(apwr))
+real <- issues_w_notif$repo
 endpoint <- paste0("POST /repos/", fake, "/issues")
 library("gh")
 # Keep in mind CRAN survey's results at: https://github.com/r-devel/cran-cookbook/wiki/CRAN-Cookbook-Survey-Results
 body <- "Dear maintainers and collaborators,
 
-This is an automated issue sent by some [volunteers that help with CRAN](https://cran.r-project.org/CRAN_team.htm) and package maintainers .
-Automatic checks performed on CRAN identified some issues and volunteers are concerned that to maintain the package on CRAN some changes are required. 
+This is an automated issue sent by some [volunteers that help with CRAN](https://cran.r-project.org/CRAN_team.htm) and package maintainers.
+Automatic checks performed on CRAN identified some issues and volunteers are concerned that to maintain the package on CRAN some changes are required.
 The maintainer should have received an email on %s, but it might have went to the spam folder or not reached the inbox.
 We hope that this issue helps in that case, if you received the email it might provide additional information that we hope it will help.
 
 The issues detected can be explored on [CRAN checks results](%s)
-Some common problems and solutions are posted on [The CRAN Cookbook](https://contributor.r-project.org/cran-cookbook/). 
+Some common problems and solutions are posted on [The CRAN Cookbook](https://contributor.r-project.org/cran-cookbook/).
 You might find your solution there.
 You can also check the [r-pkg-devel mailing list](https://stat.ethz.ch/mailman/listinfo/r-package-devel) for previous problems and solutions or ask for assistance to the community.
 
 Reply to the email address if you require CRAN's maintainers assitance (keep in mind sending it as text only and give some days to get back to you)
 "
-url_checks <- sprintf("https://cran.r-project.org/web/checks/check_results_%s.html", names(affected_packages_w_repo))
-date <- "2026-03-23"
-body <- sprintf(body, date, url_checks)
-pos_issues <-  match(names(affected_packages_w_repo), issues$Package)
-title <- sprintf("Changes required to maintain the package up to CRAN standards, id %s", 42) #issues$id[pos_issues])
+url_checks <- sprintf("https://cran.r-project.org/web/checks/check_results_%s.html", issues_w_notif$Package)
+
+body <- sprintf(body, issues_w_notif$Date, url_checks)
+title <- sprintf("Changes required to maintain the package up to CRAN standards, id %s", issues_w_notif$ID)
 
 response <- gh(endpoint = endpoint,
-    body = body[1],
-    title = title, 
+    body = body,
+    title = title,
     .accept = "application/vnd.github+json",
     .send_headers = c("X-GitHub-Api-Version" = "2022-11-28"))
 
